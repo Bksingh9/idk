@@ -49,6 +49,40 @@ export function adminClient(): SupabaseClient {
   return admin;
 }
 
+export interface SupabaseIdentity {
+  userId: string;
+  email: string;
+}
+
+/** Verify email/password via Supabase Auth (admin/anon client), through the
+ *  resilience policy. Returns the verified identity or throws. */
+export async function signInWithPassword(
+  email: string,
+  password: string
+): Promise<SupabaseIdentity> {
+  return withResilience({ dependency: DEP, operation: "auth.signIn", maxRetries: 1 }, async () => {
+    const { data, error } = await adminClient().auth.signInWithPassword({ email, password });
+    if (error || !data.user) throw new Error(error?.message ?? "invalid credentials");
+    return { userId: data.user.id, email: data.user.email ?? email };
+  });
+}
+
+/** Create a user via Supabase Auth. */
+export async function signUpWithPassword(
+  email: string,
+  password: string
+): Promise<SupabaseIdentity> {
+  return withResilience({ dependency: DEP, operation: "auth.signUp", maxRetries: 1 }, async () => {
+    const { data, error } = await adminClient().auth.admin.createUser({
+      email,
+      password,
+      email_confirm: true,
+    });
+    if (error || !data.user) throw new Error(error?.message ?? "signup failed");
+    return { userId: data.user.id, email: data.user.email ?? email };
+  });
+}
+
 /**
  * Health check. Hits Supabase Auth settings (an unauthenticated, always-present
  * endpoint) through the resilience policy. Returns ok/false rather than

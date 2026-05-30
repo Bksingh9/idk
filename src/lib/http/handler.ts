@@ -20,8 +20,9 @@ import {
 
 type Handler = (req: NextRequest, ctx: RouteCtx) => Promise<NextResponse> | NextResponse;
 
+// Next 15: the second handler arg carries `params` as a Promise.
 interface RouteCtx {
-  params?: Record<string, string | string[]>;
+  params: Promise<Record<string, string | string[]>>;
 }
 
 export function route(routeName: string, handler: Handler) {
