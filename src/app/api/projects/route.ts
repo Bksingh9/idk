@@ -7,6 +7,7 @@ import { route } from "@/lib/http/handler";
 import { requireRole } from "@/lib/auth/guard";
 import { AppError } from "@/lib/errors";
 import { createProject } from "@/lib/services/project-service";
+import { createInvitesForProject } from "@/lib/services/match-service";
 
 export const dynamic = "force-dynamic";
 
@@ -33,5 +34,8 @@ export const POST = route("/api/projects", async (req: NextRequest) => {
   }
 
   const { id } = await createProject(dev.userId, parsed.data);
-  return NextResponse.json({ id }, { status: 201 });
+  // Match eligible testers and create invites (capped). Best-effort: a matching
+  // hiccup shouldn't fail project creation.
+  const { invited } = await createInvitesForProject(id).catch(() => ({ invited: 0 }));
+  return NextResponse.json({ id, invited }, { status: 201 });
 });
