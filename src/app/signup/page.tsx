@@ -143,12 +143,12 @@ function SignupForm() {
 
       {role === "tester" && (
         <>
-          <Field label="Genres you play">
+          <FieldGroup label="Genres you play">
             <Chips options={GENRES} selected={genres} onToggle={(v) => toggle(genres, setGenres, v)} />
-          </Field>
-          <Field label="Platforms you have">
+          </FieldGroup>
+          <FieldGroup label="Platforms you have">
             <Chips options={PLATFORMS} selected={platforms} onToggle={(v) => toggle(platforms, setPlatforms, v)} />
-          </Field>
+          </FieldGroup>
           <Field label="Languages (comma-separated)">
             <input value={languages} onChange={(e) => setLanguages(e.target.value)} className={inputCls} />
           </Field>
@@ -187,6 +187,18 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
       <span className="mb-1 block text-sm font-medium text-neutral-700">{label}</span>
       {children}
     </label>
+  );
+}
+
+// For groups of interactive controls (chips): a <label> must wrap a single
+// control, so use a labelled group container instead to keep accessible names
+// (and getByRole) correct.
+function FieldGroup({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <div role="group" aria-label={label}>
+      <span className="mb-1 block text-sm font-medium text-neutral-700">{label}</span>
+      {children}
+    </div>
   );
 }
 

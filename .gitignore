@@ -35,4 +35,9 @@ yarn-error.log*
 # test / coverage
 /coverage
 
+# playwright (generated)
+/test-results
+/playwright-report
+/tests/e2e/artifacts
+
 # drizzle local journal artifacts kept; generated migrations are committed
