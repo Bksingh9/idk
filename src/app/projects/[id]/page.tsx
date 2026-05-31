@@ -4,6 +4,7 @@ import { getSession } from "@/lib/auth/server";
 import { getProjectDetail } from "@/lib/services/project-service";
 import { isAppError } from "@/lib/errors";
 import ProjectStatusToggle from "@/components/ProjectStatusToggle";
+import FeedbackRating from "@/components/FeedbackRating";
 
 export const dynamic = "force-dynamic";
 
@@ -127,6 +128,9 @@ export default async function ProjectDetailPage({
                     <span className="text-neutral-500">
                       {r.wouldYouPay == null ? "" : r.wouldYouPay ? "Would pay" : "Wouldn't pay"}
                     </span>
+                  </div>
+                  <div className="mt-2">
+                    <FeedbackRating feedbackId={r.id} current={r.stars} />
                   </div>
                   {r.bugsFound && <p className="mt-2"><span className="text-neutral-500">Bugs:</span> {r.bugsFound}</p>}
                   {r.whereDidYouDropOff && (

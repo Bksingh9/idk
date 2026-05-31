@@ -104,6 +104,7 @@ export interface FeedbackResponse {
   wouldYouPay: boolean | null;
   generalComments: string | null;
   createdAt: Date;
+  stars: number | null; // developer's quality rating, if any
 }
 
 export interface ProjectDetail {
@@ -140,6 +141,14 @@ export async function getProjectDetail(
   const responses = await withMongo("project.feedback", () =>
     collections.feedback().find({ projectId }).sort({ createdAt: -1 }).toArray()
   );
+
+  const ratings = await withMongo("project.ratings", () =>
+    collections
+      .ratings()
+      .find({ feedbackId: { $in: responses.map((r) => r._id) } })
+      .toArray()
+  );
+  const starsByFeedback = new Map(ratings.map((r) => [r.feedbackId, r.stars]));
 
   const count = responses.length;
   const avgFunRating =
@@ -178,6 +187,7 @@ export async function getProjectDetail(
         wouldYouPay: r.wouldYouPay,
         generalComments: r.generalComments,
         createdAt: r.createdAt,
+        stars: starsByFeedback.get(r._id) ?? null,
       })),
     },
   };

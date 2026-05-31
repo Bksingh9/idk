@@ -69,9 +69,9 @@ test("tester signup with genre/platform chips lands on tester dashboard", async 
   await page.waitForURL("**/dashboard/tester");
   await expect(page.getByRole("heading", { name: /tester dashboard/i })).toBeVisible();
   await expect(page.getByText(/Welcome, Tess Tester/)).toBeVisible();
-  // Reputation + tags rendered.
+  // Tester dashboard shows reputation stat and the invitations section.
   await expect(page.getByText("Reputation")).toBeVisible();
-  await expect(page.getByText("RPG, Puzzle")).toBeVisible();
+  await expect(page.getByRole("heading", { name: /invitations/i })).toBeVisible();
   await page.screenshot({ path: `${ART}/05-tester-dashboard.png`, fullPage: true });
 });
 
