@@ -8,6 +8,7 @@ import { requireRole } from "@/lib/auth/guard";
 import { AppError } from "@/lib/errors";
 import { createProject } from "@/lib/services/project-service";
 import { createInvitesForProject } from "@/lib/services/match-service";
+import { assertCanCreateProject } from "@/lib/services/billing-service";
 
 export const dynamic = "force-dynamic";
 
@@ -32,6 +33,9 @@ export const POST = route("/api/projects", async (req: NextRequest) => {
       message: parsed.error.issues.map((i) => `${i.path.join(".") || "body"}: ${i.message}`).join("; "),
     });
   }
+
+  // Plan gating (free=1 active project, indie=5, studio=unlimited).
+  await assertCanCreateProject(dev.userId);
 
   const { id } = await createProject(dev.userId, parsed.data);
   // Match eligible testers and create invites (capped). Best-effort: a matching

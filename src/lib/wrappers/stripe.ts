@@ -40,6 +40,14 @@ export const stripeWrapper = {
     return client().webhooks.constructEvent(payload, signature, env.STRIPE_WEBHOOK_SECRET!);
   },
 
+  async createCustomer(params: Stripe.CustomerCreateParams): Promise<Stripe.Customer> {
+    return withResilience({ dependency: DEP, operation: "customer.create" }, async () => {
+      const c = await client().customers.create(params);
+      recordUsage(DEP, "customer.create");
+      return c;
+    });
+  },
+
   async createCheckoutSession(
     params: Stripe.Checkout.SessionCreateParams
   ): Promise<Stripe.Checkout.Session> {

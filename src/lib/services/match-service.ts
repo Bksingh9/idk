@@ -12,6 +12,7 @@ import { withMongo } from "@/lib/wrappers/mongo";
 import { email } from "@/lib/wrappers/resend";
 import { env } from "@/lib/config/env";
 import { log } from "@/lib/observability/logger";
+import { inviteCapForPlan } from "@/lib/services/billing-service";
 
 const logger = log("match");
 const INVITE_CAP = 20;
@@ -53,7 +54,13 @@ export async function createInvitesForProject(projectId: string): Promise<{ invi
   );
   if (!project) return { invited: 0 };
 
-  const testerIds = await findEligibleTesters(project);
+  // Studio plans get a larger fan-out ("priority matching").
+  const devProfile = await withMongo("match.devPlan", () =>
+    collections.profiles().findOne({ _id: project.developerId })
+  );
+  const cap = inviteCapForPlan(devProfile?.plan ?? "free");
+
+  const testerIds = await findEligibleTesters(project, cap);
   if (testerIds.length === 0) return { invited: 0 };
 
   // Which already have invites? Only notify/insert the new ones.

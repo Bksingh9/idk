@@ -24,7 +24,10 @@ export default async function DeveloperDashboard() {
         <LogoutButton />
       </div>
       <p className="mt-2 text-neutral-600">
-        Welcome, {profile?.displayName}. Plan: <strong>{profile?.plan}</strong>.
+        Welcome, {profile?.displayName}. Plan: <strong>{profile?.plan}</strong>.{" "}
+        <Link href="/billing" className="text-sm underline">
+          Manage billing
+        </Link>
       </p>
 
       <div className="mt-8 flex items-center justify-between">
