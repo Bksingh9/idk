@@ -29,3 +29,13 @@ export async function requireRole(req: NextRequest, ...roles: Role[]): Promise<P
   }
   return principal;
 }
+
+/** Operator-only: gated by the ADMIN_EMAILS allowlist (see admin-service). */
+export async function requireAdmin(req: NextRequest): Promise<Principal> {
+  const principal = await requireAuth(req);
+  const { isAdmin } = await import("@/lib/services/admin-service");
+  if (!(await isAdmin(principal.userId))) {
+    throw new AppError({ category: "forbidden", message: "admin access required" });
+  }
+  return principal;
+}

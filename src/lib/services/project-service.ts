@@ -105,6 +105,8 @@ export interface FeedbackResponse {
   generalComments: string | null;
   createdAt: Date;
   stars: number | null; // developer's quality rating, if any
+  testerName: string;
+  testerReputation: number;
 }
 
 export interface ProjectDetail {
@@ -150,6 +152,19 @@ export async function getProjectDetail(
   );
   const starsByFeedback = new Map(ratings.map((r) => [r.feedbackId, r.stars]));
 
+  // Tester identity + reputation, visible to the developer (Phase 6).
+  const testerIds = [...new Set(responses.map((r) => r.testerId))];
+  const [testerProfilesList, profilesList] = await Promise.all([
+    withMongo("project.testerReps", () =>
+      collections.testerProfiles().find({ _id: { $in: testerIds } }).toArray()
+    ),
+    withMongo("project.testerNames", () =>
+      collections.profiles().find({ _id: { $in: testerIds } }).toArray()
+    ),
+  ]);
+  const repById = new Map(testerProfilesList.map((t) => [t._id, t.reputationScore]));
+  const nameById = new Map(profilesList.map((p) => [p._id, p.displayName]));
+
   const count = responses.length;
   const avgFunRating =
     count > 0 ? responses.reduce((s, r) => s + r.funRating, 0) / count : null;
@@ -188,6 +203,8 @@ export async function getProjectDetail(
         generalComments: r.generalComments,
         createdAt: r.createdAt,
         stars: starsByFeedback.get(r._id) ?? null,
+        testerName: nameById.get(r.testerId) ?? "Tester",
+        testerReputation: repById.get(r.testerId) ?? 0,
       })),
     },
   };

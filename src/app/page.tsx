@@ -26,8 +26,14 @@ export default async function Home() {
           <div className="rounded-lg border border-neutral-200 p-5">
             <h2 className="font-medium">I&apos;m a developer</h2>
             <p className="mt-1 text-sm text-neutral-600">
-              Post a project and get structured feedback from matched testers.
+              Post your build, get matched with real playtesters, and read structured
+              feedback — fun ratings, would-pay signal, and where players drop off.
             </p>
+            <ol className="mt-3 list-decimal pl-5 text-sm text-neutral-600">
+              <li>Post a project with target genres &amp; platforms</li>
+              <li>We invite matching testers automatically</li>
+              <li>Review aggregated feedback and rate its quality</li>
+            </ol>
             <Link
               href="/signup?role=developer"
               className="mt-4 inline-block rounded-md bg-black px-4 py-2 text-sm text-white"
@@ -38,8 +44,14 @@ export default async function Home() {
           <div className="rounded-lg border border-neutral-200 p-5">
             <h2 className="font-medium">I&apos;m a tester</h2>
             <p className="mt-1 text-sm text-neutral-600">
-              Get matched to games in your genres and earn reputation for great feedback.
+              Get matched to games in your genres, give structured feedback, and build
+              a reputation that developers can see.
             </p>
+            <ol className="mt-3 list-decimal pl-5 text-sm text-neutral-600">
+              <li>Tell us your genres, platforms &amp; languages</li>
+              <li>Accept invitations or browse open projects</li>
+              <li>Submit feedback and grow your reputation</li>
+            </ol>
             <Link
               href="/signup?role=tester"
               className="mt-4 inline-block rounded-md bg-neutral-800 px-4 py-2 text-sm text-white"

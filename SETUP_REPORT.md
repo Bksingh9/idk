@@ -9,14 +9,14 @@ Approve this report before feature work (Phase 1) begins.
 ```bash
 pnpm install
 cp .env.example .env.local      # already present in this workspace
-pnpm infra:up                   # local Postgres + Redis via Docker (proves real round-trips)
-pnpm db:migrate                 # apply Drizzle migrations
+pnpm infra:up                   # local MongoDB + Redis via Docker (proves real round-trips)
+pnpm db:indexes                 # create Mongo indexes
 pnpm test                       # unit + integration proofs (12 tests)
 pnpm dev                        # http://localhost:3000
 ```
 
 > The app boots with **placeholder Supabase keys** (URL-valid) so the engine
-> layers are fully exercisable offline. Postgres and Redis are **real** (Docker).
+> layers are fully exercisable offline. MongoDB and Redis are **real** (Docker).
 > Supabase/Stripe/Resend/Sentry are provider integrations that degrade
 > gracefully until you paste real keys.
 
@@ -27,13 +27,13 @@ pnpm dev                        # http://localhost:3000
 | # | Layer | What proves it | Result |
 |---|-------|----------------|--------|
 | 1 | **Config & secrets** | `grep -v '^AUTH_JWT_SECRET' .env.local > /tmp/b.env && pnpm exec tsx --env-file=/tmp/b.env scripts/check-env.ts` | Exits **1** with `✗ AUTH_JWT_SECRET: Required`. With full env, `pnpm check:env` → exit 0. App refuses to boot on bad config. |
-| 2 | **External wrappers** | `curl localhost:3000/api/health` | Real round-trips through redis/postgres wrappers (`ok:true`, ~9ms). One wrapper per dep; nothing calls an SDK directly. |
-| 3 | **Persistence & cache** | `pnpm db:migrate` then `pnpm test` (`tests/persistence.test.ts`) | Migration applies (4 tables). DB write+read and Redis set/get round-trip **through the wrappers**. |
+| 2 | **External wrappers** | `curl localhost:3000/api/health` | Real round-trips through redis/mongo wrappers (`ok:true`). One wrapper per dep; nothing calls an SDK directly. |
+| 3 | **Persistence & cache** | `pnpm db:indexes` then `pnpm test` (`tests/persistence.test.ts`) | Indexes created. MongoDB write+read and Redis set/get round-trip **through the wrappers**. |
 | 4 | **Streaming (SSE)** | `curl -N "localhost:3000/api/stream?count=5"` and `/stream` page | Chunks arrive ~250ms apart and render progressively. |
 | 5 | **Resilience** | `tests/resilience.test.ts`; `/api/health` with bad Supabase | Retry-with-jitter, hard timeout, give-up→normalized error, circuit breaker open/half-open/close. Unreachable Supabase **degrades gracefully** (health stays `ok`, provider shows `false`). |
 | 6 | **Rate limit & usage** | `for i in $(seq 7); do curl localhost:3000/api/demo/limited; done` | 5 allowed, then clean **429 + `Retry-After`**. `usage_units_total` + `rate_limit_decisions_total` metrics increment. |
 | 7 | **Observability** | `/api/metrics` + dev logs | Structured JSON logs with `request_id` on every request; Prometheus metrics increment (`http_requests_total`, `external_calls_total`). Sentry wrapper active when `SENTRY_DSN` set. |
-| 8 | **Memory / state** | `tests/memory.test.ts` + cookie-jar curl to `/api/demo/session` | Redis session persists across requests; durable Postgres history **trims + summarizes** past threshold while keeping the recent window. |
+| 8 | **Memory / state** | `tests/memory.test.ts` + cookie-jar curl to `/api/demo/session` | Redis session persists across requests; durable MongoDB history **trims + summarizes** past threshold while keeping the recent window. |
 | 9 | **Connector registry** | `curl -X POST localhost:3000/api/demo/connector` | Typed registry; real external round-trip (host pinned); **privileged connector blocked (403) from untrusted input**; invalid input → 400. All logged. |
 | 10 | **Auth & security** | dev-login + `/api/me` + `/api/admin/ping` | Unauth → **401**; tester → `/me` 200 but `/admin` **403** (RBAC); developer → 200; refresh rotation → 200. Security headers + locked CORS on every response. |
 

@@ -113,6 +113,17 @@ const EnvSchema = z.object({
   // --- Rate limiting (Layer 6) ---
   RATE_LIMIT_PER_USER_PER_MIN: intFromString(60),
   RATE_LIMIT_GLOBAL_PER_MIN: intFromString(1000),
+
+  // --- Admin (Phase 6) — emails allowed into the admin view ---
+  ADMIN_EMAILS: z
+    .string()
+    .default("")
+    .transform((s) =>
+      s
+        .split(",")
+        .map((e) => e.trim().toLowerCase())
+        .filter(Boolean)
+    ),
 });
 
 export type Env = z.infer<typeof EnvSchema>;

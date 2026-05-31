@@ -124,9 +124,15 @@ export default async function ProjectDetailPage({
               {a.responses.map((r) => (
                 <div key={r.id} className="rounded-lg border border-neutral-200 p-4 text-sm">
                   <div className="flex items-center justify-between">
-                    <span className="font-medium">Fun: {r.funRating}/5</span>
+                    <span className="font-medium">
+                      {r.testerName}{" "}
+                      <span className="ml-1 rounded bg-amber-100 px-1.5 py-0.5 text-xs text-amber-800">
+                        rep {r.testerReputation}
+                      </span>
+                    </span>
                     <span className="text-neutral-500">
-                      {r.wouldYouPay == null ? "" : r.wouldYouPay ? "Would pay" : "Wouldn't pay"}
+                      Fun: {r.funRating}/5
+                      {r.wouldYouPay == null ? "" : r.wouldYouPay ? " · would pay" : " · wouldn't pay"}
                     </span>
                   </div>
                   <div className="mt-2">
