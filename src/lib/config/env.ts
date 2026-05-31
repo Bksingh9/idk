@@ -74,10 +74,15 @@ const EnvSchema = z.object({
     message: "REDIS_URL must be a redis:// or rediss:// URL",
   }),
 
-  // --- Supabase (PROVIDER) ---
-  NEXT_PUBLIC_SUPABASE_URL: z.string().url(),
-  NEXT_PUBLIC_SUPABASE_ANON_KEY: z.string().min(1),
-  SUPABASE_SERVICE_ROLE_KEY: z.string().min(1),
+  // --- Supabase (PROVIDER, optional) ---
+  // Not used by the product path (we use built-in JWT auth + Postgres). Kept as
+  // an optional provider integration; only validated if present.
+  NEXT_PUBLIC_SUPABASE_URL: z.preprocess(
+    (v) => (typeof v === "string" && v.trim() !== "" ? v : undefined),
+    z.string().url().optional()
+  ),
+  NEXT_PUBLIC_SUPABASE_ANON_KEY: optionalSecret,
+  SUPABASE_SERVICE_ROLE_KEY: optionalSecret,
 
   // --- Stripe (PROVIDER, optional until Phase 5) ---
   STRIPE_SECRET_KEY: optionalSecret.refine(
@@ -158,4 +163,9 @@ export const features = {
   stripe: !!env.STRIPE_SECRET_KEY,
   resend: !!env.RESEND_API_KEY,
   sentry: !!env.SENTRY_DSN,
+  supabase: !!(
+    env.NEXT_PUBLIC_SUPABASE_URL &&
+    env.NEXT_PUBLIC_SUPABASE_ANON_KEY &&
+    env.SUPABASE_SERVICE_ROLE_KEY
+  ),
 } as const;

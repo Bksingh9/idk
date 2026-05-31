@@ -1,10 +1,19 @@
 /**
- * Layer 10 — security headers + CORS (used by middleware).
- * CORS is locked to the configured allow-list; unknown origins get no CORS
- * grant. Security headers applied to every response.
+ * Layer 10 — security headers + CORS (used by edge middleware).
+ *
+ * This module runs in the EDGE runtime, so it deliberately does NOT import the
+ * full server config (which contains server-only secrets and is validated for
+ * the Node runtime). It reads only the two values it needs directly from
+ * process.env. CORS is locked to the configured allow-list.
  */
 import { NextResponse } from "next/server";
-import { env } from "@/lib/config/env";
+
+const allowedOrigins = (process.env.CORS_ALLOWED_ORIGINS ?? "")
+  .split(",")
+  .map((o) => o.trim())
+  .filter(Boolean);
+
+const isProd = process.env.NODE_ENV === "production";
 
 export function applySecurityHeaders(res: NextResponse): NextResponse {
   res.headers.set("X-Content-Type-Options", "nosniff");
@@ -15,14 +24,14 @@ export function applySecurityHeaders(res: NextResponse): NextResponse {
     "Permissions-Policy",
     "camera=(), microphone=(), geolocation=(), browsing-topics=()"
   );
-  if (env.NODE_ENV === "production") {
+  if (isProd) {
     res.headers.set("Strict-Transport-Security", "max-age=63072000; includeSubDomains; preload");
   }
   return res;
 }
 
 export function applyCors(res: NextResponse, origin: string | null): NextResponse {
-  if (origin && env.CORS_ALLOWED_ORIGINS.includes(origin)) {
+  if (origin && allowedOrigins.includes(origin)) {
     res.headers.set("Access-Control-Allow-Origin", origin);
     res.headers.set("Vary", "Origin");
     res.headers.set("Access-Control-Allow-Credentials", "true");

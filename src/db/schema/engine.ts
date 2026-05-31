@@ -1,10 +1,9 @@
 /**
- * Drizzle schema — FOUNDATION tables only.
+ * Drizzle schema — ENGINE/FOUNDATION tables.
  *
- * These exist to prove the persistence layer (migrations + round-trip) and to
- * back Layer 6 (durable usage log) and Layer 8 (durable conversation history).
- * Product tables (profiles, projects, …) arrive in Phase 1 as Supabase SQL
- * migrations with RLS — kept separate from this engine-level schema.
+ * These back Layer 6 (durable usage log) and Layer 8 (durable conversation
+ * history) and prove the persistence layer. Product/domain tables live in
+ * ./product.ts. Both are re-exported from ./index.ts.
  */
 import { sql } from "drizzle-orm";
 import {
