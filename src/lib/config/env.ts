@@ -76,7 +76,7 @@ const EnvSchema = z.object({
   }),
 
   // --- Supabase (PROVIDER, optional) ---
-  // Not used by the product path (we use built-in JWT auth + Postgres). Kept as
+  // Not used by the product path (we use built-in JWT auth + MongoDB). Kept as
   // an optional provider integration; only validated if present.
   NEXT_PUBLIC_SUPABASE_URL: z.preprocess(
     (v) => (typeof v === "string" && v.trim() !== "" ? v : undefined),
