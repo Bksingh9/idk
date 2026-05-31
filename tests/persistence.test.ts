@@ -1,31 +1,30 @@
 /**
- * Layer 3 proof — durable Postgres write+read and Redis cache set/get round-trip
- * through the wrappers (never the raw SDK).
+ * Layer 3 proof — durable MongoDB write+read and Redis cache set/get round-trip
+ * through the wrappers (never the raw driver).
  */
 import { afterAll, describe, expect, it } from "vitest";
-import { eq } from "drizzle-orm";
-import { db, withDb, disconnectDb } from "@/lib/wrappers/postgres";
-import { healthChecks } from "@/db/schema";
+import { randomUUID } from "node:crypto";
+import { collections } from "@/db/collections";
+import { withMongo, disconnectMongo } from "@/lib/wrappers/mongo";
 import { redis } from "@/lib/wrappers/redis";
 
 afterAll(async () => {
-  await disconnectDb();
+  await disconnectMongo();
   await redis.disconnect();
 });
 
-describe("Layer 3 — Postgres (Drizzle wrapper)", () => {
-  it("writes and reads back a row", async () => {
+describe("Layer 3 — MongoDB (wrapper)", () => {
+  it("writes and reads back a document", async () => {
+    const id = randomUUID();
     const note = `health-${Date.now()}`;
-    const [inserted] = await withDb("insert.health", () =>
-      db.insert(healthChecks).values({ note }).returning()
+    await withMongo("test.insert", () =>
+      collections.healthChecks().insertOne({ _id: id, note, createdAt: new Date() })
     );
-    expect(inserted.id).toBeTruthy();
-
-    const rows = await withDb("select.health", () =>
-      db.select().from(healthChecks).where(eq(healthChecks.id, inserted.id))
+    const found = await withMongo("test.find", () =>
+      collections.healthChecks().findOne({ _id: id })
     );
-    expect(rows).toHaveLength(1);
-    expect(rows[0].note).toBe(note);
+    expect(found?.note).toBe(note);
+    await withMongo("test.cleanup", () => collections.healthChecks().deleteOne({ _id: id }));
   });
 });
 

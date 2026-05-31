@@ -64,10 +64,11 @@ const EnvSchema = z.object({
   AUTH_ACCESS_TTL_SECONDS: intFromString(900),
   AUTH_REFRESH_TTL_SECONDS: intFromString(60 * 60 * 24 * 14),
 
-  // --- Postgres (CORE) ---
-  DATABASE_URL: z.string().url().refine((u) => u.startsWith("postgres"), {
-    message: "DATABASE_URL must be a postgres connection string",
+  // --- MongoDB (CORE) ---
+  MONGODB_URI: z.string().refine((u) => u.startsWith("mongodb"), {
+    message: "MONGODB_URI must be a mongodb:// or mongodb+srv:// connection string",
   }),
+  MONGODB_DB: z.string().min(1).default("playtestpool"),
 
   // --- Redis (CORE) ---
   REDIS_URL: z.string().url().refine((u) => u.startsWith("redis"), {

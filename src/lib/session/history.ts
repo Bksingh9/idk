@@ -1,18 +1,16 @@
 /**
- * Layer 8 — durable conversation history with a trimming/summarization strategy.
+ * Layer 8 — durable conversation history with a trimming/summarization strategy
+ * (now backed by MongoDB).
  *
- * Messages are appended to Postgres (system of record). To keep a long history
- * within a bounded window, when the number of non-summary messages exceeds
- * MAX_MESSAGES we collapse the oldest overflow into a single rolling "summary"
- * message and delete the originals — so context stays bounded while nothing is
- * silently lost (the gist is retained in the summary).
- *
- * The summarizer here is deterministic (no LLM wired yet); swap `summarize` for
- * a model-backed implementation later without changing callers.
+ * Messages are appended to the conversation_messages collection (system of
+ * record; the Redis session is the hot cache). When the number of non-summary
+ * messages exceeds TRIM_THRESHOLD we collapse the oldest overflow into a single
+ * rolling "summary" message and delete the originals — so context stays bounded
+ * while the gist is retained.
  */
-import { and, asc, eq, ne } from "drizzle-orm";
-import { db, withDb } from "@/lib/wrappers/postgres";
-import { conversationMessages, conversationSessions } from "@/db/schema";
+import { randomUUID } from "node:crypto";
+import { collections } from "@/db/collections";
+import { withMongo } from "@/lib/wrappers/mongo";
 import { log } from "@/lib/observability/logger";
 
 const logger = log("history");
@@ -30,7 +28,6 @@ export interface Message {
 }
 
 function summarize(messages: { role: string; content: string }[]): string {
-  // Deterministic placeholder strategy: a compact digest of what was said.
   const parts = messages.map((m) => `${m.role}: ${m.content}`);
   const joined = parts.join(" | ");
   const clipped = joined.length > 500 ? joined.slice(0, 497) + "..." : joined;
@@ -39,32 +36,40 @@ function summarize(messages: { role: string; content: string }[]): string {
 
 export const history = {
   async ensureSession(sessionId: string, userId: string): Promise<void> {
-    await withDb("history.ensureSession", () =>
-      db
-        .insert(conversationSessions)
-        .values({ id: sessionId, userId })
-        .onConflictDoNothing()
-    );
+    await withMongo("history.ensureSession", async () => {
+      const now = new Date();
+      await collections.conversationSessions().updateOne(
+        { _id: sessionId },
+        { $setOnInsert: { userId, createdAt: now }, $set: { updatedAt: now } },
+        { upsert: true }
+      );
+    });
   },
 
   async append(sessionId: string, role: Role, content: string): Promise<void> {
-    await withDb("history.append", () =>
-      db.insert(conversationMessages).values({ sessionId, role, content })
+    await withMongo("history.append", () =>
+      collections.conversationMessages().insertOne({
+        _id: randomUUID(),
+        sessionId,
+        role,
+        content,
+        createdAt: new Date(),
+      })
     );
     await this.trimIfNeeded(sessionId);
   },
 
   async list(sessionId: string): Promise<Message[]> {
-    const rows = await withDb("history.list", () =>
-      db
-        .select()
-        .from(conversationMessages)
-        .where(eq(conversationMessages.sessionId, sessionId))
-        .orderBy(asc(conversationMessages.createdAt))
+    const rows = await withMongo("history.list", () =>
+      collections
+        .conversationMessages()
+        .find({ sessionId })
+        .sort({ createdAt: 1 })
+        .toArray()
     );
     return rows.map((r) => ({
-      id: r.id,
-      role: r.role as Role,
+      id: r._id,
+      role: r.role,
       content: r.content,
       createdAt: r.createdAt,
     }));
@@ -75,17 +80,12 @@ export const history = {
    * recent MAX_MESSAGES into a single rolling summary message.
    */
   async trimIfNeeded(sessionId: string): Promise<{ trimmed: number } | null> {
-    const live = await withDb("history.live", () =>
-      db
-        .select()
-        .from(conversationMessages)
-        .where(
-          and(
-            eq(conversationMessages.sessionId, sessionId),
-            ne(conversationMessages.role, "summary")
-          )
-        )
-        .orderBy(asc(conversationMessages.createdAt))
+    const live = await withMongo("history.live", () =>
+      collections
+        .conversationMessages()
+        .find({ sessionId, role: { $ne: "summary" } })
+        .sort({ createdAt: 1 })
+        .toArray()
     );
 
     if (live.length <= TRIM_THRESHOLD) return null;
@@ -93,14 +93,17 @@ export const history = {
     const overflow = live.slice(0, live.length - MAX_MESSAGES);
     const summaryText = summarize(overflow);
 
-    await withDb("history.trim", async () => {
-      await db.transaction(async (tx) => {
-        for (const m of overflow) {
-          await tx.delete(conversationMessages).where(eq(conversationMessages.id, m.id));
-        }
-        await tx
-          .insert(conversationMessages)
-          .values({ sessionId, role: "summary", content: summaryText });
+    await withMongo("history.trim", async () => {
+      await collections
+        .conversationMessages()
+        .deleteMany({ _id: { $in: overflow.map((m) => m._id) } });
+      await collections.conversationMessages().insertOne({
+        _id: randomUUID(),
+        sessionId,
+        role: "summary",
+        content: summaryText,
+        // Place the summary before the retained window.
+        createdAt: overflow[overflow.length - 1].createdAt,
       });
     });
 

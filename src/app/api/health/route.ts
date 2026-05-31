@@ -8,7 +8,7 @@
 import { NextResponse } from "next/server";
 import { route } from "@/lib/http/handler";
 import { redis } from "@/lib/wrappers/redis";
-import { pingDb } from "@/lib/wrappers/postgres";
+import { pingMongo } from "@/lib/wrappers/mongo";
 import { checkSupabase } from "@/lib/wrappers/supabase";
 import { stripeWrapper } from "@/lib/wrappers/stripe";
 import { email } from "@/lib/wrappers/resend";
@@ -30,17 +30,17 @@ async function timed(fn: () => Promise<{ ok: boolean; detail: string }>): Promis
 }
 
 export const GET = route("/api/health", async () => {
-  const [postgres, redisCheck, supabase, stripe, resend] = await Promise.all([
-    timed(async () => ({ ok: (await pingDb()) === 1, detail: "select 1" })),
+  const [mongo, redisCheck, supabase, stripe, resend] = await Promise.all([
+    timed(async () => ({ ok: await pingMongo(), detail: "ping" })),
     timed(async () => ({ ok: (await redis.ping()) === "PONG", detail: "ping" })),
     timed(() => checkSupabase()),
     timed(() => stripeWrapper.healthCheck()),
     timed(() => email.healthCheck()),
   ]);
 
-  const core = { postgres, redis: redisCheck };
+  const core = { mongo, redis: redisCheck };
   const providers = { supabase, stripe, resend };
-  const coreHealthy = postgres.ok && redisCheck.ok;
+  const coreHealthy = mongo.ok && redisCheck.ok;
 
   return NextResponse.json(
     {

@@ -1,11 +1,9 @@
 /**
- * Profile service — read helpers for the current user's profile data.
- * Service-layer authorization: callers pass the authenticated userId; queries
- * never return another user's private data.
+ * Profile service (MongoDB). Service-layer authorization: callers pass the
+ * authenticated userId; queries never return another user's private data.
  */
-import { eq } from "drizzle-orm";
-import { db, withDb } from "@/lib/wrappers/postgres";
-import { profiles, testerProfiles } from "@/db/schema";
+import { collections } from "@/db/collections";
+import { withMongo } from "@/lib/wrappers/mongo";
 
 export interface FullProfile {
   id: string;
@@ -25,26 +23,23 @@ export interface FullProfile {
 }
 
 export async function getProfile(userId: string): Promise<FullProfile | null> {
-  const rows = await withDb("profile.get", () =>
-    db.select().from(profiles).where(eq(profiles.id, userId)).limit(1)
+  const p = await withMongo("profile.get", () =>
+    collections.profiles().findOne({ _id: userId })
   );
-  const p = rows[0];
   if (!p) return null;
 
   const full: FullProfile = {
-    id: p.id,
-    role: p.role as "developer" | "tester",
+    id: p._id,
+    role: p.role,
     displayName: p.displayName,
     country: p.country,
-    plan: p.plan as "free" | "indie" | "studio",
+    plan: p.plan,
   };
 
   if (p.role === "tester") {
-    const t = (
-      await withDb("profile.getTester", () =>
-        db.select().from(testerProfiles).where(eq(testerProfiles.userId, userId)).limit(1)
-      )
-    )[0];
+    const t = await withMongo("profile.getTester", () =>
+      collections.testerProfiles().findOne({ _id: userId })
+    );
     if (t) {
       full.tester = {
         genres: t.genres,

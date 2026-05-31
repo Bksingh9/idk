@@ -1,13 +1,13 @@
 /**
- * Auth service — account creation and credential verification.
+ * Auth service — account creation and credential verification (MongoDB).
  *
- * Owns the transactional creation of users + profiles (+ tester_profiles for
- * testers). Authorization elsewhere is enforced in the service layer, so these
- * functions are the single entry point for identity.
+ * Standalone Mongo has no multi-document transactions, so creation is
+ * sequential; the unique index on users.email is the source of truth against
+ * duplicates (a racing insert throws 11000, mapped to a conflict).
  */
-import { eq } from "drizzle-orm";
-import { db, withDb } from "@/lib/wrappers/postgres";
-import { users, profiles, testerProfiles } from "@/db/schema";
+import { randomUUID } from "node:crypto";
+import { collections } from "@/db/collections";
+import { withMongo } from "@/lib/wrappers/mongo";
 import { hashPassword, verifyPassword } from "@/lib/auth/password";
 import { AppError } from "@/lib/errors";
 
@@ -35,74 +35,78 @@ export interface Identity {
   displayName: string;
 }
 
+function isDuplicateKey(e: unknown): boolean {
+  return typeof e === "object" && e !== null && (e as { code?: number }).code === 11000;
+}
+
 export async function signup(input: SignupInput): Promise<Identity> {
   const email = input.email.trim().toLowerCase();
+  const userId = randomUUID();
+  const passwordHash = await hashPassword(input.password);
+  const now = new Date();
 
-  const existing = await withDb("auth.findUser", () =>
-    db.select({ id: users.id }).from(users).where(eq(users.email, email)).limit(1)
-  );
-  if (existing.length > 0) {
-    throw new AppError({ category: "conflict", message: "an account with this email already exists" });
+  try {
+    await withMongo("auth.createUser", () =>
+      collections.users().insertOne({ _id: userId, email, passwordHash, createdAt: now })
+    );
+  } catch (e) {
+    if (isDuplicateKey(e)) {
+      throw new AppError({ category: "conflict", message: "an account with this email already exists" });
+    }
+    throw e;
   }
 
-  const passwordHash = await hashPassword(input.password);
-
-  const identity = await withDb("auth.signup", () =>
-    db.transaction(async (tx) => {
-      const [user] = await tx
-        .insert(users)
-        .values({ email, passwordHash })
-        .returning({ id: users.id });
-
-      await tx.insert(profiles).values({
-        id: user.id,
-        role: input.role,
-        displayName: input.displayName,
-        country: input.country ?? null,
-      });
-
-      if (input.role === "tester") {
-        const t = input.tester;
-        await tx.insert(testerProfiles).values({
-          userId: user.id,
-          genres: t?.genres ?? [],
-          platforms: t?.platforms ?? [],
-          languages: t?.languages ?? [],
-          experienceLevel: t?.experienceLevel ?? "new",
-        });
-      }
-
-      return { userId: user.id, role: input.role, displayName: input.displayName };
+  await withMongo("auth.createProfile", () =>
+    collections.profiles().insertOne({
+      _id: userId,
+      role: input.role,
+      displayName: input.displayName,
+      country: input.country ?? null,
+      createdAt: now,
+      plan: "free",
     })
   );
 
-  return identity;
+  if (input.role === "tester") {
+    const t = input.tester;
+    await withMongo("auth.createTesterProfile", () =>
+      collections.testerProfiles().insertOne({
+        _id: userId,
+        genres: t?.genres ?? [],
+        platforms: t?.platforms ?? [],
+        languages: t?.languages ?? [],
+        experienceLevel: t?.experienceLevel ?? "new",
+        reputationScore: 0,
+        testsCompleted: 0,
+        isActive: true,
+      })
+    );
+  }
+
+  return { userId, role: input.role, displayName: input.displayName };
 }
 
 export async function login(email: string, password: string): Promise<Identity> {
   const normalized = email.trim().toLowerCase();
-  const rows = await withDb("auth.login", () =>
-    db
-      .select({
-        id: users.id,
-        passwordHash: users.passwordHash,
-        role: profiles.role,
-        displayName: profiles.displayName,
-      })
-      .from(users)
-      .innerJoin(profiles, eq(profiles.id, users.id))
-      .where(eq(users.email, normalized))
-      .limit(1)
+  const user = await withMongo("auth.findUser", () =>
+    collections.users().findOne({ email: normalized })
   );
 
-  const row = rows[0];
-  // Verify a hash even when the user is missing, to avoid timing/user enumeration.
-  const ok = row
-    ? await verifyPassword(password, row.passwordHash)
+  // Verify a hash even when the user is missing, to blunt user enumeration.
+  const ok = user
+    ? await verifyPassword(password, user.passwordHash)
     : await verifyPassword(password, "scrypt$00$00").then(() => false);
 
-  if (!row || !ok) {
+  if (!user || !ok) {
     throw new AppError({ category: "unauthorized", message: "invalid email or password" });
   }
-  return { userId: row.id, role: row.role as SignupRole, displayName: row.displayName };
+
+  const profile = await withMongo("auth.findProfile", () =>
+    collections.profiles().findOne({ _id: user._id })
+  );
+  if (!profile) {
+    throw new AppError({ category: "internal", message: "profile missing for user" });
+  }
+
+  return { userId: user._id, role: profile.role, displayName: profile.displayName };
 }

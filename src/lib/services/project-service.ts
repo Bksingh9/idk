@@ -1,13 +1,12 @@
 /**
- * Project service — developer-side reads/writes.
+ * Project service — developer-side reads/writes (MongoDB).
  *
  * Authorization is service-layer: every function takes the authenticated
- * developerId and scopes queries to it, so a developer can only ever touch
- * their own projects and the feedback on them.
+ * developerId and scopes queries to it.
  */
-import { and, desc, eq, sql } from "drizzle-orm";
-import { db, withDb } from "@/lib/wrappers/postgres";
-import { projects, feedback } from "@/db/schema";
+import { randomUUID } from "node:crypto";
+import { collections } from "@/db/collections";
+import { withMongo } from "@/lib/wrappers/mongo";
 import { AppError } from "@/lib/errors";
 
 export interface CreateProjectInput {
@@ -33,49 +32,67 @@ export async function createProject(
   developerId: string,
   input: CreateProjectInput
 ): Promise<{ id: string }> {
-  const [row] = await withDb("project.create", () =>
-    db
-      .insert(projects)
-      .values({
-        developerId,
-        title: input.title,
-        description: input.description,
-        platform: input.platform,
-        buildUrl: input.buildUrl ?? null,
-        targetGenres: input.targetGenres,
-        targetPlatforms: input.targetPlatforms,
-        targetCountries: input.targetCountries,
-        feedbackQuestions: input.feedbackQuestions,
-      })
-      .returning({ id: projects.id })
+  const id = randomUUID();
+  await withMongo("project.create", () =>
+    collections.projects().insertOne({
+      _id: id,
+      developerId,
+      title: input.title,
+      description: input.description,
+      platform: input.platform,
+      buildUrl: input.buildUrl ?? null,
+      buildFilePath: null,
+      targetGenres: input.targetGenres,
+      targetPlatforms: input.targetPlatforms,
+      targetCountries: input.targetCountries,
+      feedbackQuestions: input.feedbackQuestions,
+      status: "open",
+      createdAt: new Date(),
+    })
   );
-  return { id: row.id };
+  return { id };
 }
 
 export async function listProjectsForDeveloper(
   developerId: string
 ): Promise<ProjectListItem[]> {
-  const rows = await withDb("project.list", () =>
-    db
-      .select({
-        id: projects.id,
-        title: projects.title,
-        status: projects.status,
-        createdAt: projects.createdAt,
-        feedbackCount: sql<number>`count(${feedback.id})::int`,
-      })
-      .from(projects)
-      .leftJoin(feedback, eq(feedback.projectId, projects.id))
-      .where(eq(projects.developerId, developerId))
-      .groupBy(projects.id)
-      .orderBy(desc(projects.createdAt))
+  const rows = await withMongo("project.list", () =>
+    collections
+      .projects()
+      .aggregate<{
+        _id: string;
+        title: string;
+        status: "open" | "closed";
+        createdAt: Date;
+        feedbackCount: number;
+      }>([
+        { $match: { developerId } },
+        { $sort: { createdAt: -1 } },
+        {
+          $lookup: {
+            from: "feedback",
+            localField: "_id",
+            foreignField: "projectId",
+            as: "fb",
+          },
+        },
+        {
+          $project: {
+            title: 1,
+            status: 1,
+            createdAt: 1,
+            feedbackCount: { $size: "$fb" },
+          },
+        },
+      ])
+      .toArray()
   );
   return rows.map((r) => ({
-    id: r.id,
+    id: r._id,
     title: r.title,
-    status: r.status as "open" | "closed",
+    status: r.status,
     createdAt: r.createdAt,
-    feedbackCount: Number(r.feedbackCount),
+    feedbackCount: r.feedbackCount,
   }));
 }
 
@@ -115,21 +132,13 @@ export async function getProjectDetail(
   developerId: string,
   projectId: string
 ): Promise<ProjectDetail> {
-  const [p] = await withDb("project.get", () =>
-    db
-      .select()
-      .from(projects)
-      .where(and(eq(projects.id, projectId), eq(projects.developerId, developerId)))
-      .limit(1)
+  const p = await withMongo("project.get", () =>
+    collections.projects().findOne({ _id: projectId, developerId })
   );
   if (!p) throw new AppError({ category: "not_found", message: "project not found" });
 
-  const responses = await withDb("project.feedback", () =>
-    db
-      .select()
-      .from(feedback)
-      .where(eq(feedback.projectId, projectId))
-      .orderBy(desc(feedback.createdAt))
+  const responses = await withMongo("project.feedback", () =>
+    collections.feedback().find({ projectId }).sort({ createdAt: -1 }).toArray()
   );
 
   const count = responses.length;
@@ -145,12 +154,12 @@ export async function getProjectDetail(
     .filter((v): v is string => !!v);
 
   return {
-    id: p.id,
+    id: p._id,
     title: p.title,
     description: p.description,
     platform: p.platform,
     buildUrl: p.buildUrl,
-    status: p.status as "open" | "closed",
+    status: p.status,
     targetGenres: p.targetGenres,
     targetPlatforms: p.targetPlatforms,
     targetCountries: p.targetCountries,
@@ -162,7 +171,7 @@ export async function getProjectDetail(
       wouldPayPct,
       dropOffPoints,
       responses: responses.map((r) => ({
-        id: r.id,
+        id: r._id,
         bugsFound: r.bugsFound,
         funRating: r.funRating,
         whereDidYouDropOff: r.whereDidYouDropOff,
@@ -179,12 +188,10 @@ export async function setProjectStatus(
   projectId: string,
   status: "open" | "closed"
 ): Promise<void> {
-  const res = await withDb("project.setStatus", () =>
-    db
-      .update(projects)
-      .set({ status })
-      .where(and(eq(projects.id, projectId), eq(projects.developerId, developerId)))
-      .returning({ id: projects.id })
+  const res = await withMongo("project.setStatus", () =>
+    collections.projects().updateOne({ _id: projectId, developerId }, { $set: { status } })
   );
-  if (res.length === 0) throw new AppError({ category: "not_found", message: "project not found" });
+  if (res.matchedCount === 0) {
+    throw new AppError({ category: "not_found", message: "project not found" });
+  }
 }

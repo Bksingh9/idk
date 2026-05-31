@@ -6,11 +6,11 @@ import { afterAll, describe, expect, it } from "vitest";
 import { randomUUID } from "node:crypto";
 import { history, MAX_MESSAGES, TRIM_THRESHOLD } from "@/lib/session/history";
 import { sessionStore } from "@/lib/session/session-store";
-import { disconnectDb } from "@/lib/wrappers/postgres";
+import { disconnectMongo } from "@/lib/wrappers/mongo";
 import { redis } from "@/lib/wrappers/redis";
 
 afterAll(async () => {
-  await disconnectDb();
+  await disconnectMongo();
   await redis.disconnect();
 });
 

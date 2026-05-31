@@ -28,4 +28,13 @@ export async function register() {
     },
     "configuration validated — booting"
   );
+
+  // Ensure Mongo indexes (idempotent). Non-fatal: a transient DB outage at boot
+  // shouldn't crash the app — indexes will be retried on next boot.
+  try {
+    const { ensureIndexes } = await import("@/db/ensure-indexes");
+    await ensureIndexes();
+  } catch (e) {
+    logger.warn({ err: e instanceof Error ? e.message : String(e) }, "index setup deferred");
+  }
 }
