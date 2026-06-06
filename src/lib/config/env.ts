@@ -113,6 +113,9 @@ const EnvSchema = z.object({
   // --- Rate limiting (Layer 6) ---
   RATE_LIMIT_PER_USER_PER_MIN: intFromString(60),
   RATE_LIMIT_GLOBAL_PER_MIN: intFromString(1000),
+  // Signups per window per IP. Default protects production; tests/CI raise it
+  // since the whole suite signs up many users from one IP in one window.
+  SIGNUP_RATE_LIMIT: intFromString(10),
 
   // --- Admin (Phase 6) — emails allowed into the admin view ---
   ADMIN_EMAILS: z

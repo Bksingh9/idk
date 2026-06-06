@@ -7,6 +7,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { route } from "@/lib/http/handler";
 import { enforceCustomLimit } from "@/lib/http/rate-limit";
+import { env } from "@/lib/config/env";
 import { AppError } from "@/lib/errors";
 import { signup } from "@/lib/services/auth-service";
 import { issueTokens } from "@/lib/auth/tokens";
@@ -40,7 +41,7 @@ const SignupSchema = z.discriminatedUnion("role", [
 ]);
 
 export const POST = route("/api/auth/signup", async (req: NextRequest) => {
-  await enforceCustomLimit(req, "signup", 10);
+  await enforceCustomLimit(req, "signup", env.SIGNUP_RATE_LIMIT);
 
   const parsed = SignupSchema.safeParse(await req.json().catch(() => ({})));
   if (!parsed.success) {

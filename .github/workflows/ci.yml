@@ -60,6 +60,7 @@ jobs:
           MONGODB_DB=playtestpool_ci
           REDIS_URL=redis://localhost:6379
           ADMIN_EMAILS=admin-e2e@example.com
+          SIGNUP_RATE_LIMIT=1000
           EOF
 
       - name: Ensure Mongo indexes
