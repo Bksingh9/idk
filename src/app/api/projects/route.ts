@@ -1,0 +1,45 @@
+/**
+ * Phase 2 — create a project (developer only).
+ */
+import { NextRequest, NextResponse } from "next/server";
+import { z } from "zod";
+import { route } from "@/lib/http/handler";
+import { requireRole } from "@/lib/auth/guard";
+import { AppError } from "@/lib/errors";
+import { createProject } from "@/lib/services/project-service";
+import { createInvitesForProject } from "@/lib/services/match-service";
+import { assertCanCreateProject } from "@/lib/services/billing-service";
+
+export const dynamic = "force-dynamic";
+
+const CreateSchema = z.object({
+  title: z.string().min(1).max(120),
+  description: z.string().min(1).max(5000),
+  platform: z.string().min(1).max(40),
+  buildUrl: z.string().url().max(500).optional().or(z.literal("").transform(() => undefined)),
+  targetGenres: z.array(z.string().min(1)).max(20).default([]),
+  targetPlatforms: z.array(z.string().min(1)).max(20).default([]),
+  targetCountries: z.array(z.string().min(1)).max(50).default([]),
+  feedbackQuestions: z.array(z.string().min(1).max(200)).max(5).default([]),
+});
+
+export const POST = route("/api/projects", async (req: NextRequest) => {
+  const dev = await requireRole(req, "developer");
+
+  const parsed = CreateSchema.safeParse(await req.json().catch(() => ({})));
+  if (!parsed.success) {
+    throw new AppError({
+      category: "validation",
+      message: parsed.error.issues.map((i) => `${i.path.join(".") || "body"}: ${i.message}`).join("; "),
+    });
+  }
+
+  // Plan gating (free=1 active project, indie=5, studio=unlimited).
+  await assertCanCreateProject(dev.userId);
+
+  const { id } = await createProject(dev.userId, parsed.data);
+  // Match eligible testers and create invites (capped). Best-effort: a matching
+  // hiccup shouldn't fail project creation.
+  const { invited } = await createInvitesForProject(id).catch(() => ({ invited: 0 }));
+  return NextResponse.json({ id, invited }, { status: 201 });
+});
